@@ -1,21 +1,27 @@
 const fetch = require('node-fetch');
-const HttpProxyAgent = require('https-proxy-agent');
+const { HttpsProxyAgent } = require('https-proxy-agent');
 
 export default async function handler(req, res) {
     const { url } = req.query;
-    
-    // Using your specific IP: 43.246.227.57
-    const proxyUrl = 'http://43.246.227.57:8080'; 
-    const agent = new HttpProxyAgent(proxyUrl);
+    if (!url) return res.status(400).send("No URL provided");
 
     try {
-        const response = await fetch(url, { agent });
+        // 1. Fetch a fresh list from your ProxyScrape link
+        const proxyRes = await fetch('https://api.proxyscrape.com/v4/free-proxy-list/get?protocol=http&timeout=5000&country=all&request=displayproxies&proxy_format=ipport&format=text');
+        const proxyText = await proxyRes.text();
+        const proxies = proxyText.split('\n').filter(p => p.trim());
+
+        // 2. Pick a random proxy from the list
+        const randomProxy = proxies[Math.floor(Math.random() * proxies.length)];
+        const agent = new HttpsProxyAgent(`http://${randomProxy}`);
+
+        // 3. Attempt to fetch the target site
+        const response = await fetch(url, { agent, timeout: 5000 });
         const body = await response.text();
-        
-        // Add headers so your browser doesn't block the result
-        res.setHeader('Access-Control-Allow-Origin', '*');
+
+        res.setHeader('Content-Type', 'text/html');
         res.status(200).send(body);
     } catch (err) {
-        res.status(500).json({ error: "Proxy connection failed." });
+        res.status(500).json({ error: "Proxy connection failed. Try refreshing!", details: err.message });
     }
 }
